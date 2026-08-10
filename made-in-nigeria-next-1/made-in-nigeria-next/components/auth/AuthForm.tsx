@@ -69,13 +69,18 @@ export default function AuthForm({ startOnCreateTab, preselectBusiness }: AuthFo
       return;
     }
 
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', data.user.id)
       .single();
 
-    const destination = (profile && SIGNIN_DESTINATION[profile.role]) || '/';
+    // Explicit cast rather than trusting the generic chain here -- see the
+    // long comment in lib/auth/requireRole.ts for why. This sidesteps it
+    // entirely for this one query, independent of whatever types/database.ts
+    // currently resolves to.
+    const profileRole = (profileData as { role: string } | null)?.role;
+    const destination = (profileRole && SIGNIN_DESTINATION[profileRole]) || '/';
     router.push(destination);
     router.refresh();
   }
