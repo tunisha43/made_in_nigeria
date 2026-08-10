@@ -1,9 +1,15 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
+import type { User } from '@supabase/supabase-js';
 
-type Profile = Database['public']['Tables']['profiles']['Row'];
-type Role = Profile['role'];
+export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type Role = Profile['role'];
+
+export interface RequireRoleResult {
+  user: User;
+  profile: Profile;
+}
 
 /**
  * Call this at the top of any protected Server Component page, e.g.:
@@ -20,25 +26,42 @@ type Role = Profile['role'];
  * Deliberately called per-page instead of centralized in middleware.ts,
  * so every protected route states its own required role explicitly in
  * the page file itself -- easy to audit, easy to get right.
+ *
+ * NOTE: every variable below has an explicit type annotation rather than
+ * relying on TypeScript narrowing `user`/`profile` to non-null after the
+ * `if (...) { redirect(...) }` checks. That narrowing SHOULD work (redirect()
+ * is typed to return `never`), but in practice it caused this function's
+ * inferred return type to collapse to `never` entirely, which broke every
+ * page that calls it with "Property 'x' does not exist on type 'never'".
+ * Explicit types + non-null assertions sidestep that regardless of the
+ * exact cause.
  */
-export async function requireRole(allowedRoles: Role[]) {
+export async function requireRole(allowedRoles: Role[]): Promise<RequireRoleResult> {
   const supabase = await createClient();
 
   const {
-    data: { user },
+    data: { user: maybeUser },
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (!maybeUser) {
     redirect('/auth');
   }
+  const user: User = maybeUser as User;
 
-  const { data: profile } = await supabase
+  const { data } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .single();
 
-  if (!profile || !allowedRoles.includes(profile.role)) {
+  const maybeProfile: Profile | null = data;
+
+  if (!maybeProfile) {
+    redirect('/');
+  }
+  const profile: Profile = maybeProfile as Profile;
+
+  if (!allowedRoles.includes(profile.role)) {
     redirect('/');
   }
 
