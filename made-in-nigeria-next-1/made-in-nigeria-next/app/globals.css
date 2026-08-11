@@ -655,6 +655,9 @@ body.dash-body{ background:var(--cream-dim); }
 .dash-nav-item:hover{ background:rgba(255,255,255,.05); color:var(--cream); }
 .dash-nav-item.is-active{ background:var(--forest-800); color:var(--cream); }
 .dash-sidebar-foot{ margin-top:auto; padding:14px 12px; border-top:1px solid rgba(255,255,255,.08); font-size:12px; color:#6E6857; }
+.dash-signout-btn{ background:none; border:1px solid rgba(255,255,255,.14); color:#C7C1AF; font-size:12px; padding:6px 12px; border-radius:8px; cursor:pointer; font-family:inherit; }
+.dash-signout-btn:hover{ background:rgba(255,255,255,.06); color:var(--cream); }
+.dash-signout-btn:disabled{ opacity:.6; cursor:default; }
 
 /* ---- Topbar ---- */
 .dash-topbar{
