@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ReactNode } from 'react';
+import SignOutButton from '@/components/auth/SignOutButton';
 
 export interface DashboardNavItem {
   href: string;
@@ -65,6 +66,9 @@ export default function DashboardShell({
           Signed in as {signedInAs}
           <br />
           {signedInSubtext}
+          <div style={{ marginTop: 10 }}>
+            <SignOutButton />
+          </div>
         </div>
       </aside>
 
