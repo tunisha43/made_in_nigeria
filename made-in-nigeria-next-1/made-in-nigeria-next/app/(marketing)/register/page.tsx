@@ -1,4 +1,5 @@
 import RegisterForm from '@/components/register/RegisterForm';
+import { requireRole } from '@/lib/auth/requireRole';
 
 export const metadata = {
   title: 'Register Your Business',
@@ -11,7 +12,12 @@ const STEPS = [
   { num: 4, title: 'Verification', desc: 'Confirm your location and documents to earn your badge.', active: false },
 ];
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  // Only business owners reach this page — AuthForm sends new business-owner
+  // signups here directly. If someone signs up as another role and manually
+  // types /register, this bounces them to "/" rather than showing the form.
+  const { profile, user } = await requireRole(['business_owner']);
+
   return (
     <>
       <section className="page-header">
@@ -19,8 +25,9 @@ export default function RegisterPage() {
           <div className="eyebrow">Step 2 of 2 · Business Setup</div>
           <h1>Now, tell us about your business</h1>
           <p>
-            You&apos;re signed in as <b>Adaeze Nwosu</b>. This step is just about the business itself —
-            your name and phone are already on file. Photos, pricing, and verification documents come later.
+            You&apos;re signed in as <b>{profile.full_name || 'there'}</b>. This step is just about
+            the business itself — your name and phone are already on file. Photos, pricing, and
+            verification documents come later.
           </p>
         </div>
       </section>
@@ -48,7 +55,7 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <RegisterForm />
+          <RegisterForm ownerId={user.id} />
         </div>
       </section>
     </>
