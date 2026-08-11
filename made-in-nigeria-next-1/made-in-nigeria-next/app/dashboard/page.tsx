@@ -1,19 +1,24 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import DashboardShell, { DashboardNavSection } from '@/components/dashboard/DashboardShell';
 import { requireRole } from '@/lib/auth/requireRole';
+import type { Database } from '@/types/database';
+
+type Business = Database['public']['Tables']['businesses']['Row'];
 
 export const metadata = {
   title: 'Dashboard',
 };
 
-const NAV: DashboardNavSection[] = [
+function getNav(businessSlug: string): DashboardNavSection[] {
+  return [
   {
     label: 'Headquarters',
     items: [
       { href: '/dashboard', label: 'Dashboard', active: true, icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x={3} y={3} width={7} height={9} rx={1.5} /><rect x={14} y={3} width={7} height={5} rx={1.5} /><rect x={14} y={12} width={7} height={9} rx={1.5} /><rect x={3} y={16} width={7} height={5} rx={1.5} /></svg>
       ) },
-      { href: '/business/adaeze-textiles', label: 'Public Profile', icon: (
+      { href: `/business/${businessSlug}`, label: 'Public Profile', icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 21V8l9-5 9 5v13" /><path d="M9 21v-6h6v6" /></svg>
       ) },
     ],
@@ -52,21 +57,38 @@ const NAV: DashboardNavSection[] = [
       ) },
     ],
   },
-];
+  ];
+}
 
 export default async function BusinessDashboardPage() {
-  const { profile } = await requireRole(['business_owner']);
+  const { user, profile, supabase } = await requireRole(['business_owner']);
+
+  const { data } = await supabase
+    .from('businesses')
+    .select('*')
+    .eq('owner_id', user.id)
+    .single();
+
+  // Explicit cast rather than trusting the generic chain -- see the long
+  // comment in lib/auth/requireRole.ts for why.
+  const business = data as Business | null;
+
+  // A business_owner account with no business row yet (e.g. they signed up
+  // but never finished Register, or Register failed) shouldn't see a broken
+  // dashboard referencing a business that doesn't exist -- send them to
+  // finish that step instead.
+  if (!business) {
+    redirect('/register');
+  }
+  const biz: Business = business as Business;
 
   return (
     <DashboardShell
-      navSections={NAV}
+      navSections={getNav(biz.slug)}
       signedInAs={profile.full_name || 'Business Owner'}
-      // TODO: query `businesses` where owner_id = user.id once a business
-      // actually exists for this account -- still hardcoded to the one
-      // example business until that lookup is wired up.
-      signedInSubtext="Adaeze Textiles · MIN-NG-00004582"
+      signedInSubtext={`${biz.name} · ${biz.min_id ?? 'ID pending'}`}
       welcomeTitle={`Welcome, ${profile.full_name?.split(' ')[0] || 'there'}.`}
-      welcomeSubtitle="Here's how Adaeze Textiles is doing today."
+      welcomeSubtitle={`Here's how ${biz.name} is doing today.`}
     >
       <div className="widget span-2">
         <div className="widget-head"><h3>Business Health Score</h3><span className="w-link">Why this score?</span></div>
@@ -110,7 +132,7 @@ export default async function BusinessDashboardPage() {
         <div className="widget-head"><h3>Ranking</h3></div>
         <div className="rank-badge">
           <div className="rank-num">#3</div>
-          <p style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>of 41 in Textiles &amp; Fashion, Abia State</p>
+          <p style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>of 41 in {biz.category}, {biz.state ?? 'your state'}</p>
         </div>
       </div>
 
@@ -168,7 +190,7 @@ export default async function BusinessDashboardPage() {
         </div>
         <div className="ai-card">
           <div className="ai-tag">PRICING</div>
-          <p>Similar verified textile sellers in Abia price wrap sets between &#8358;16,000&ndash;&#8358;21,000. You&apos;re within range.</p>
+          <p>Similar verified sellers in {biz.state ?? 'your state'} price similar items competitively. You&apos;re within range.</p>
         </div>
       </div>
 
