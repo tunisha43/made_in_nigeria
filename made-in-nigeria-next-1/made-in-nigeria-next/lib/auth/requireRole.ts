@@ -9,6 +9,7 @@ export type Role = Profile['role'];
 export interface RequireRoleResult {
   user: User;
   profile: Profile;
+  supabase: Awaited<ReturnType<typeof createClient>>;
 }
 
 /**
@@ -65,5 +66,5 @@ export async function requireRole(allowedRoles: Role[]): Promise<RequireRoleResu
     redirect('/');
   }
 
-  return { user, profile };
+  return { user, profile, supabase };
 }
