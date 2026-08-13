@@ -5,48 +5,17 @@ import Stamp from '@/components/ui/Stamp';
 import Tabs from '@/components/ui/Tabs';
 import ProductGallery from '@/components/product/ProductGallery';
 import QtyStepper from '@/components/product/QtyStepper';
+import PlaceOrderButton from '@/components/product/PlaceOrderButton';
+import { createClient } from '@/lib/supabase/server';
+import type { Database } from '@/types/database';
 
-// Placeholder lookup standing in for:
-//   supabase.from('products').select('*, business:businesses(*)').eq('slug', slug).single()
-const PRODUCTS = {
-  'ankara-wrap-set': {
-    name: 'Ankara Wrap Set',
-    category: 'Textiles & Fashion',
-    priceNow: '₦18,500',
-    priceWas: '₦23,000',
-    badge: 'Export-Ready' as const,
-    description:
-      'A two-piece wrap set hand-dyed in traditional Ankara patterns, tailored to order in Aba. Includes wrap skirt and matching head tie. Machine-washable; colors set with a vinegar rinse before first wear.',
-    longDescription:
-      "Hand-dyed using traditional resist techniques, then tailored to order. Every piece is cut and sewn in Adaeze Textiles' Aba workshop -- no two dye patterns are perfectly identical, which is part of the character of genuine Ankara work.",
-    images: ['thumb-3', 'thumb-1', 'thumb-5', 'thumb-6'],
-    specs: [
-      { label: 'Material', value: '100% cotton Ankara wax print' },
-      { label: 'Sizes available', value: 'S – XXL (made to order)' },
-      { label: 'Care', value: 'Hand wash cold, line dry' },
-      { label: 'Origin', value: 'Aba, Abia State' },
-    ],
-    seller: {
-      slug: 'adaeze-textiles',
-      name: 'Adaeze Textiles',
-      location: 'Aba, Abia State',
-      minId: 'MIN-NG-00004582',
-      thumb: 'thumb-2',
-    },
-  },
-} as const;
+type Product = Database['public']['Tables']['products']['Row'];
+type Business = Database['public']['Tables']['businesses']['Row'];
 
-type ProductSlug = keyof typeof PRODUCTS;
+const THUMBS = ['thumb-1', 'thumb-2', 'thumb-3', 'thumb-4', 'thumb-5', 'thumb-6'];
 
-const RELATED_PRODUCTS = [
-  { slug: 'adire-table-runner', thumb: 'thumb-1', badge: 'trending' as const, badgeLabel: 'Export-Ready', name: 'Adire Table Runner', price: '₦11,000' },
-  { slug: 'aso-oke-headwrap', thumb: 'thumb-6', badge: 'new' as const, badgeLabel: 'New', name: 'Aso-Oke Headwrap', price: '₦7,500' },
-  { slug: 'adire-throw-pillow', thumb: 'thumb-5', badge: 'verified' as const, badgeLabel: 'Verified', name: 'Adire Throw Pillow Cover', price: '₦6,200' },
-  { slug: 'ankara-tote-bag', thumb: 'thumb-3', badge: 'trending' as const, badgeLabel: 'Export-Ready', name: 'Ankara Tote Bag', price: '₦9,800' },
-];
-
-export function generateStaticParams() {
-  return Object.keys(PRODUCTS).map((slug) => ({ slug }));
+function formatNaira(kobo: number): string {
+  return `₦${(kobo / 100).toLocaleString('en-NG')}`;
 }
 
 export default async function ProductDetailPage({
@@ -55,49 +24,86 @@ export default async function ProductDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = PRODUCTS[slug as ProductSlug];
+  const supabase = await createClient();
+
+  const { data: productData } = await supabase
+    .from('products')
+    .select('*')
+    .eq('slug', slug)
+    .single();
+  const product = productData as Product | null;
   if (!product) notFound();
+  const item: Product = product as Product;
+
+  const { data: businessData } = await supabase
+    .from('businesses')
+    .select('*')
+    .eq('id', item.business_id)
+    .single();
+  const business = businessData as Business | null;
+  // A product should never outlive its business given the foreign key, but
+  // guard anyway rather than crash rendering if data is ever inconsistent.
+  if (!business) notFound();
+  const seller: Business = business as Business;
+
+  const { data: relatedData } = await supabase
+    .from('products')
+    .select('*')
+    .eq('business_id', seller.id)
+    .neq('id', item.id)
+    .limit(4);
+  const related = (relatedData as Product[] | null) ?? [];
+
+  // No real product photos exist yet (Supabase Storage isn't wired up) --
+  // one deterministic placeholder gradient stands in, picked from the
+  // product id so it's at least stable across page loads.
+  const thumbIndex = item.id.charCodeAt(0) % THUMBS.length;
+  const isSellerVerified = seller.verification_level !== 'registered';
+  const locationParts = [seller.city, seller.state].filter(Boolean).join(', ');
 
   return (
     <>
       <div className="wrap breadcrumb">
-        <Link href="/">Home</Link> / <Link href="/marketplace">Marketplace</Link> / {product.name}
+        <Link href="/">Home</Link> / <Link href="/marketplace">Marketplace</Link> / {item.name}
       </div>
 
       <section className="wrap product-grid">
-        <ProductGallery images={[...product.images]} />
+        <ProductGallery images={[THUMBS[thumbIndex]]} />
 
         <div>
-          <div className="product-cat">{product.category}</div>
-          <h1 className="product-title">{product.name}</h1>
-          <Badge variant="trending">{product.badge}</Badge>
+          <div className="product-cat">{seller.category}</div>
+          <h1 className="product-title">{item.name}</h1>
 
           <div className="price-block">
-            <span className="price-now">{product.priceNow}</span>
-            <span className="price-was">{product.priceWas}</span>
+            <span className="price-now">{formatNaira(item.price_kobo)}</span>
+            {item.compare_at_price_kobo && item.compare_at_price_kobo > item.price_kobo && (
+              <span className="price-was">{formatNaira(item.compare_at_price_kobo)}</span>
+            )}
           </div>
-          <p style={{ fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.6, marginTop: 10 }}>
-            {product.description}
-          </p>
+          {item.description && (
+            <p style={{ fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.6, marginTop: 10 }}>
+              {item.description}
+            </p>
+          )}
 
-          <Link href={`/business/${product.seller.slug}`} className="seller-row">
-            <div className={`seller-avatar ${product.seller.thumb}`} aria-hidden="true" />
+          <Link href={`/business/${seller.slug}`} className="seller-row">
+            <div className={`seller-avatar ${THUMBS[(thumbIndex + 1) % THUMBS.length]}`} aria-hidden="true" />
             <div style={{ flex: 1 }}>
-              <div className="name">{product.seller.name}</div>
-              <div className="meta">{product.seller.location} &middot; {product.seller.minId}</div>
+              <div className="name">{seller.name}</div>
+              <div className="meta">{locationParts || seller.category} &middot; {seller.min_id ?? 'ID pending'}</div>
             </div>
-            <Badge variant="verified">Verified</Badge>
+            {isSellerVerified && <Badge variant="verified">Verified</Badge>}
           </Link>
 
           <div className="qty-row">
             <QtyStepper />
-            <span style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>Ships within 3–5 business days</span>
+            <span style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>
+              Seller will confirm delivery timing after ordering
+            </span>
           </div>
 
           <div className="product-actions">
-            <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} type="button">
-              Add to Cart
-            </button>
+            <PlaceOrderButton businessId={seller.id} productId={item.id} />
             <Link href="/auth" className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }}>
               Message Seller
             </Link>
@@ -108,13 +114,7 @@ export default async function ProductDetailPage({
               <Stamp>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M5 13l4 4L19 7" /></svg>
               </Stamp>
-              Verified seller
-            </div>
-            <div className="trust-mini-item">
-              <Stamp>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-              </Stamp>
-              Escrow-protected payment
+              {isSellerVerified ? 'Verified seller' : 'Registered seller'}
             </div>
           </div>
         </div>
@@ -129,20 +129,7 @@ export default async function ProductDetailPage({
                 label: 'Description',
                 panel: (
                   <div style={{ maxWidth: '70ch', marginTop: 26, fontSize: 14.5, color: 'var(--ink-soft)', lineHeight: 1.7 }}>
-                    {product.longDescription}
-                  </div>
-                ),
-              },
-              {
-                key: 'specs',
-                label: 'Specifications',
-                panel: (
-                  <div style={{ marginTop: 26 }}>
-                    {product.specs.map((s) => (
-                      <div className="hp-row" style={{ maxWidth: 480 }} key={s.label}>
-                        <span>{s.label}</span><b>{s.value}</b>
-                      </div>
-                    ))}
+                    {item.description || 'No additional description provided for this product yet.'}
                   </div>
                 ),
               },
@@ -160,29 +147,29 @@ export default async function ProductDetailPage({
         </div>
       </section>
 
-      <section className="section">
-        <div className="wrap">
-          <div className="section-head">
-            <div>
-              <div className="eyebrow">From the same seller</div>
-              <h2>More from {product.seller.name}</h2>
+      {related.length > 0 && (
+        <section className="section">
+          <div className="wrap">
+            <div className="section-head">
+              <div>
+                <div className="eyebrow">From the same seller</div>
+                <h2>More from {seller.name}</h2>
+              </div>
+            </div>
+            <div className="card-grid">
+              {related.map((p, i) => (
+                <Link key={p.slug} href={`/product/${p.slug}`} className="biz-card">
+                  <div className={`biz-thumb ${THUMBS[i % THUMBS.length]}`} />
+                  <div className="biz-body">
+                    <h4>{p.name}</h4>
+                    <div className="biz-meta">{formatNaira(p.price_kobo)}</div>
+                  </div>
+                </Link>
+              ))}
             </div>
           </div>
-          <div className="card-grid">
-            {RELATED_PRODUCTS.map((p) => (
-              <Link key={p.slug} href={`/product/${p.slug}`} className="biz-card">
-                <div className={`biz-thumb ${p.thumb}`}>
-                  <Badge variant={p.badge}>{p.badgeLabel}</Badge>
-                </div>
-                <div className="biz-body">
-                  <h4>{p.name}</h4>
-                  <div className="biz-meta">{p.price}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
     </>
   );
 }
