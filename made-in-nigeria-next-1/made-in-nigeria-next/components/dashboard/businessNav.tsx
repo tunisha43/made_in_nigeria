@@ -14,7 +14,7 @@ export type BusinessNavKey =
 /**
  * Shared sidebar for every business-owner page under /dashboard/*.
  * Pass which item should show as active -- pages that don't exist yet
- * keep href="#" until they're built (Messages, Analytics, AI Coach).
+ * keep href="#" until they're built (Messages, AI Coach).
  */
 export function getBusinessNav(businessSlug: string, active: BusinessNavKey): DashboardNavSection[] {
   return [
@@ -65,8 +65,9 @@ export function getBusinessNav(businessSlug: string, active: BusinessNavKey): Da
           ),
         },
         {
-          href: '#',
+          href: '/dashboard/analytics',
           label: 'Analytics',
+          active: active === 'analytics',
           icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 20V10M12 20V4M6 20v-6" /></svg>
           ),
