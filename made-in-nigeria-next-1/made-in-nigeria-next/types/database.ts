@@ -95,6 +95,101 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['profiles']['Row']>;
         Relationships: [];
       };
+      orders: {
+        Row: {
+          id: string;
+          business_id: string;
+          product_id: string | null;
+          customer_id: string | null;
+          status: 'pending' | 'delivered';
+          created_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['orders']['Row']> & {
+          business_id: string;
+        };
+        Update: Partial<Database['public']['Tables']['orders']['Row']>;
+        Relationships: [
+          {
+            foreignKeyName: 'orders_business_id_fkey';
+            columns: ['business_id'];
+            referencedRelation: 'businesses';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'orders_product_id_fkey';
+            columns: ['product_id'];
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      team_members: {
+        Row: {
+          id: string;
+          business_id: string;
+          name: string;
+          position: string;
+          phone: string | null;
+          email: string | null;
+          start_date: string;
+          end_date: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['team_members']['Row']> & {
+          business_id: string;
+          name: string;
+          position: string;
+          start_date: string;
+        };
+        Update: Partial<Database['public']['Tables']['team_members']['Row']>;
+        Relationships: [
+          {
+            foreignKeyName: 'team_members_business_id_fkey';
+            columns: ['business_id'];
+            referencedRelation: 'businesses';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      reviews: {
+        Row: {
+          id: string;
+          order_id: string;
+          business_id: string;
+          product_id: string | null;
+          customer_id: string;
+          rating: number;
+          comment: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['reviews']['Row']> & {
+          order_id: string;
+          business_id: string;
+          customer_id: string;
+          rating: number;
+        };
+        Update: Partial<Database['public']['Tables']['reviews']['Row']>;
+        Relationships: [
+          {
+            foreignKeyName: 'reviews_order_id_fkey';
+            columns: ['order_id'];
+            referencedRelation: 'orders';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'reviews_business_id_fkey';
+            columns: ['business_id'];
+            referencedRelation: 'businesses';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'reviews_product_id_fkey';
+            columns: ['product_id'];
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
