@@ -1,6 +1,12 @@
-import Badge from '@/components/ui/Badge';
 import DashboardShell, { DashboardNavSection } from '@/components/dashboard/DashboardShell';
 import { requireRole } from '@/lib/auth/requireRole';
+import OrdersWithReviews, { OrderDisplay } from '@/components/account/OrdersWithReviews';
+import type { Database } from '@/types/database';
+
+type Order = Database['public']['Tables']['orders']['Row'];
+type Product = Database['public']['Tables']['products']['Row'];
+type Business = Database['public']['Tables']['businesses']['Row'];
+type Review = Database['public']['Tables']['reviews']['Row'];
 
 export const metadata = {
   title: 'My Account',
@@ -32,15 +38,50 @@ const NAV: DashboardNavSection[] = [
   },
 ];
 
-const WISHLIST = [
-  { slug: 'ankara-wrap-set', thumb: 'thumb-3', badge: 'trending' as const, badgeLabel: 'Export-Ready', name: 'Ankara Wrap Set', price: '₦18,500' },
-  { slug: 'adire-table-runner', thumb: 'thumb-1', badge: 'trending' as const, badgeLabel: 'Export-Ready', name: 'Adire Table Runner', price: '₦11,000' },
-  { slug: 'aso-oke-headwrap', thumb: 'thumb-6', badge: 'new' as const, badgeLabel: 'New', name: 'Aso-Oke Headwrap', price: '₦7,500' },
-  { slug: 'adire-throw-pillow', thumb: 'thumb-5', badge: 'verified' as const, badgeLabel: 'Verified', name: 'Adire Throw Pillow', price: '₦6,200' },
-];
-
 export default async function CustomerDashboardPage() {
-  const { user, profile } = await requireRole(['customer', 'professional']);
+  const { user, profile, supabase } = await requireRole(['customer', 'professional']);
+
+  const { data: ordersData } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('customer_id', user.id)
+    .order('created_at', { ascending: false });
+  const orders = (ordersData as Order[] | null) ?? [];
+
+  const productIds = [...new Set(orders.map((o) => o.product_id).filter((id): id is string => !!id))];
+  const businessIds = [...new Set(orders.map((o) => o.business_id))];
+
+  const { data: productsData } = productIds.length
+    ? await supabase.from('products').select('*').in('id', productIds)
+    : { data: [] as Product[] };
+  const products = (productsData as Product[] | null) ?? [];
+  const productById = new Map(products.map((p) => [p.id, p]));
+
+  const { data: businessesData } = businessIds.length
+    ? await supabase.from('businesses').select('*').in('id', businessIds)
+    : { data: [] as Business[] };
+  const businesses = (businessesData as Business[] | null) ?? [];
+  const businessById = new Map(businesses.map((b) => [b.id, b]));
+
+  const { data: reviewsData } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('customer_id', user.id)
+    .order('created_at', { ascending: false });
+  const myReviews = (reviewsData as Review[] | null) ?? [];
+  const reviewedOrderIds = myReviews.map((r) => r.order_id);
+
+  const pendingOrders = orders.filter((o) => o.status === 'pending');
+  const deliveredOrders = orders.filter((o) => o.status === 'delivered');
+
+  const orderDisplays: OrderDisplay[] = orders.map((order) => ({
+    id: order.id,
+    status: order.status,
+    productName: (order.product_id && productById.get(order.product_id)?.name) || 'Product',
+    businessName: businessById.get(order.business_id)?.name || 'Business',
+    businessId: order.business_id,
+    productId: order.product_id,
+  }));
 
   return (
     <DashboardShell
@@ -51,74 +92,65 @@ export default async function CustomerDashboardPage() {
       welcomeSubtitle="Here's what's happening with your account."
     >
       <div className="widget span-1 stat-widget">
-        <div className="widget-head"><h3>In Transit</h3></div>
-        <div className="figure">2</div>
-        <div className="delta delta-flat">1 arriving this week</div>
+        <div className="widget-head"><h3>Pending</h3></div>
+        <div className="figure">{pendingOrders.length}</div>
+        <div className="delta delta-flat">Awaiting delivery</div>
       </div>
       <div className="widget span-1 stat-widget">
         <div className="widget-head"><h3>Delivered</h3></div>
-        <div className="figure">14</div>
+        <div className="figure">{deliveredOrders.length}</div>
         <div className="delta delta-up">Since joining</div>
       </div>
       <div className="widget span-1 stat-widget">
         <div className="widget-head"><h3>Wishlist</h3></div>
-        <div className="figure">7</div>
-        <div className="delta delta-flat">items saved</div>
+        <div className="figure">—</div>
+        <div className="delta delta-flat">Not built yet</div>
       </div>
       <div className="widget span-1 stat-widget">
         <div className="widget-head"><h3>Saved Businesses</h3></div>
-        <div className="figure">5</div>
-        <div className="delta delta-flat">following</div>
+        <div className="figure">—</div>
+        <div className="delta delta-flat">Not built yet</div>
       </div>
 
       <div className="widget span-4">
-        <div className="widget-head"><h3>Recent Orders</h3><span className="w-link">View all</span></div>
-        <div className="order-row"><span className="dot-tag"><span className="dot-sm" style={{ background: 'var(--gold-500)' }} />Ankara Wrap Set &middot; Adaeze Textiles</span><b>In Transit &middot; Order #1042</b></div>
-        <div className="order-row"><span className="dot-tag"><span className="dot-sm" style={{ background: 'var(--forest-600)' }} />Cold-pressed Palm Oil, 5L &middot; Bayelsa Fresh Farms</span><b>Delivered &middot; Aug 2</b></div>
-        <div className="order-row"><span className="dot-tag"><span className="dot-sm" style={{ background: 'var(--forest-600)' }} />Hand-tanned Leather Bag &middot; Okon Leather Works</span><b>Delivered &middot; Jul 24</b></div>
+        <div className="widget-head"><h3>Recent Orders</h3></div>
+        <OrdersWithReviews orders={orderDisplays} reviewedOrderIds={reviewedOrderIds} />
+      </div>
+
+      <div className="widget span-2">
+        <div className="widget-head"><h3>Wishlist</h3></div>
+        <div className="empty-state">Saving products for later isn&apos;t built yet.</div>
+      </div>
+
+      <div className="widget span-2">
+        <div className="widget-head"><h3>Saved Businesses</h3></div>
+        <div className="empty-state">Following businesses isn&apos;t built yet.</div>
       </div>
 
       <div className="widget span-4">
-        <div className="widget-head"><h3>From Your Wishlist</h3><span className="w-link">View all</span></div>
-        <div className="card-grid grid-4">
-          {WISHLIST.map((p) => (
-            <a href={`/product/${p.slug}`} className="biz-card" key={p.slug}>
-              <div className={`biz-thumb ${p.thumb}`}>
-                <Badge variant={p.badge}>{p.badgeLabel}</Badge>
-              </div>
-              <div className="biz-body">
-                <h4 style={{ fontSize: 14 }}>{p.name}</h4>
-                <div className="biz-meta">{p.price}</div>
-              </div>
-            </a>
-          ))}
-        </div>
-      </div>
-
-      <div className="widget span-2">
-        <div className="widget-head"><h3>Saved Businesses</h3><span className="w-link">Manage</span></div>
-        <div className="team-row">
-          <div className="team-avatar" style={{ background: 'var(--forest-700)' }}>AT</div>
-          <div><div className="name">Adaeze Textiles</div><div className="act">Aba, Abia &middot; Verified</div></div>
-        </div>
-        <div className="team-row">
-          <div className="team-avatar" style={{ background: 'var(--clay)' }}>BF</div>
-          <div><div className="name">Bayelsa Fresh Farms</div><div className="act">Yenagoa, Bayelsa &middot; Verified</div></div>
-        </div>
-      </div>
-
-      <div className="widget span-2">
-        <div className="widget-head"><h3>My Reviews</h3><span className="w-link">Write a review</span></div>
-        <div className="review-mini">
-          <div className="stamp" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-1.5z" /></svg>
+        <div className="widget-head"><h3>My Reviews</h3></div>
+        {myReviews.length === 0 ? (
+          <div className="empty-state">
+            No reviews written yet. You can review any delivered order above.
           </div>
-          <div>
-            <div className="stars">&#9733;&#9733;&#9733;&#9733;&#9733; &middot; Bayelsa Fresh Farms</div>
-            <p>&quot;Palm oil arrived well-packed and fast.&quot;</p>
-          </div>
-        </div>
-        <div className="empty-state" style={{ marginTop: 14 }}>1 delivered order is still waiting on your review.</div>
+        ) : (
+          myReviews.map((review) => {
+            const b = businessById.get(review.business_id);
+            return (
+              <div className="review-mini" key={review.id}>
+                <div className="stamp" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-1.5z" /></svg>
+                </div>
+                <div>
+                  <div className="stars">
+                    {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} &middot; {b?.name ?? 'Business'}
+                  </div>
+                  {review.comment && <p>&quot;{review.comment}&quot;</p>}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </DashboardShell>
   );
