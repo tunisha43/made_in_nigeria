@@ -20,7 +20,8 @@ export default function MarkDeliveredButton({ orderId }: MarkDeliveredButtonProp
     // resolution here -- see the long comment in types/database.ts and
     // lib/auth/requireRole.ts.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await supabase.from('orders').update({ status: 'delivered' } as any).eq('id', orderId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('orders') as any).update({ status: 'delivered' }).eq('id', orderId);
 
     router.refresh();
   }
