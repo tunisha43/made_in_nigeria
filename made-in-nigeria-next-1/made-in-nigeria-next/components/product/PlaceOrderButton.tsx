@@ -35,7 +35,8 @@ export default function PlaceOrderButton({ businessId, productId }: PlaceOrderBu
     // resolution here -- see the long comment in types/database.ts and
     // lib/auth/requireRole.ts.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: insertError } = await supabase.from('orders').insert(payload as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: insertError } = await (supabase.from('orders') as any).insert(payload);
 
     if (insertError) {
       setError(insertError.message);
