@@ -76,7 +76,7 @@ export default function RegisterForm({ ownerId }: RegisterFormProps) {
     // `as never`) here deliberately -- `never` fails to compile against a
     // concrete object type ("insufficient overlap"), `any` doesn't.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: insertError } = await supabase.from('businesses').insert(payload as any);
+    const { error: insertError } = await (supabase.from('businesses') as any).insert(payload);
 
     if (insertError) {
       setError(
