@@ -8,6 +8,7 @@ import type { Database } from '@/types/database';
 
 type Business = Database['public']['Tables']['businesses']['Row'];
 type Product = Database['public']['Tables']['products']['Row'];
+type Review = Database['public']['Tables']['reviews']['Row'];
 
 const THUMBS = ['thumb-1', 'thumb-2', 'thumb-3', 'thumb-4', 'thumb-5', 'thumb-6'];
 
@@ -61,6 +62,29 @@ export default async function BusinessProfilePage({
     .select('*')
     .eq('business_id', biz.id);
   const products = (productsData as Product[] | null) ?? [];
+
+  const { data: reviewsData } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('business_id', biz.id)
+    .order('created_at', { ascending: false });
+  const reviews = (reviewsData as Review[] | null) ?? [];
+
+  const reviewerIds = [...new Set(reviews.map((r) => r.customer_id))];
+  const { data: reviewersData } = reviewerIds.length
+    ? await supabase.from('profiles').select('*').in('id', reviewerIds)
+    : { data: [] as { id: string; full_name: string }[] };
+  const reviewerNameById = new Map((reviewersData ?? []).map((p) => [p.id, p.full_name]));
+
+  function reviewerLabel(customerId: string): string {
+    const fullName = reviewerNameById.get(customerId);
+    if (!fullName) return 'A Customer';
+    const parts = fullName.trim().split(/\s+/);
+    return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0];
+  }
+
+  const avgRating =
+    reviews.length > 0 ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) : null;
 
   const levelInfo = LEVEL_INFO[biz.verification_level];
   const memberSince = new Date(biz.created_at).getFullYear();
@@ -126,11 +150,27 @@ export default async function BusinessProfilePage({
                   {
                     key: 'reviews',
                     label: 'Reviews',
-                    panel: (
-                      <div className="empty-state" style={{ marginTop: 18 }}>
-                        No reviews yet. Be the first to share your experience with {biz.name}.
-                      </div>
-                    ),
+                    panel:
+                      reviews.length > 0 ? (
+                        <div style={{ marginTop: 18 }}>
+                          <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 12 }}>
+                            {avgRating} average &middot; {reviews.length} review{reviews.length === 1 ? '' : 's'}
+                          </p>
+                          {reviews.map((review) => (
+                            <div className="review-item" key={review.id}>
+                              <div className="review-head">
+                                <span>{reviewerLabel(review.customer_id)}</span>
+                                <span>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
+                              </div>
+                              {review.comment && <p>&quot;{review.comment}&quot;</p>}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="empty-state" style={{ marginTop: 18 }}>
+                          No reviews yet. Be the first to share your experience with {biz.name}.
+                        </div>
+                      ),
                   },
                 ]}
               />
