@@ -53,7 +53,7 @@ export default function AddProductForm({ businessId }: AddProductFormProps) {
     // resolution here -- see the long comment in types/database.ts and
     // lib/auth/requireRole.ts.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: insertError } = await supabase.from('products').insert(payload as any);
+    const { error: insertError } = await (supabase.from('products') as any).insert(payload);
 
     if (insertError) {
       setError(
