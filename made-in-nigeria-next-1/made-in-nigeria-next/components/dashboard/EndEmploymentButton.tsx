@@ -22,11 +22,8 @@ export default function EndEmploymentButton({ memberId, memberName }: EndEmploym
     setLoading(true);
     const today = new Date().toISOString().slice(0, 10);
 
-    // Cast at the call site rather than trusting supabase-js's generic
-    // resolution here -- see the long comment in types/database.ts and
-    // lib/auth/requireRole.ts.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await supabase.from('team_members').update({ end_date: today } as any).eq('id', memberId);
+    await (supabase.from('team_members') as any).update({ end_date: today }).eq('id', memberId);
 
     router.refresh();
   }
