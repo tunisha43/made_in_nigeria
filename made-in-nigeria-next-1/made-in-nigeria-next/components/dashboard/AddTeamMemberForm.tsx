@@ -46,7 +46,7 @@ export default function AddTeamMemberForm({ businessId }: AddTeamMemberFormProps
     // resolution here -- see the long comment in types/database.ts and
     // lib/auth/requireRole.ts.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: insertError } = await supabase.from('team_members').insert(payload as any);
+    const { error: insertError } = await (supabase.from('team_members') as any).insert(payload);
 
     if (insertError) {
       setError(insertError.message);
