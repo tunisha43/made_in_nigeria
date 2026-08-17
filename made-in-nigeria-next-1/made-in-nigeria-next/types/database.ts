@@ -84,6 +84,7 @@ export interface Database {
         Row: {
           id: string;
           full_name: string;
+          phone: string | null;
           role: 'customer' | 'business_owner' | 'professional' | 'investor' | 'admin';
           created_at: string;
         };
@@ -186,6 +187,27 @@ export interface Database {
             foreignKeyName: 'reviews_product_id_fkey';
             columns: ['product_id'];
             referencedRelation: 'products';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      saved_businesses: {
+        Row: {
+          id: string;
+          customer_id: string;
+          business_id: string;
+          created_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['saved_businesses']['Row']> & {
+          customer_id: string;
+          business_id: string;
+        };
+        Update: Partial<Database['public']['Tables']['saved_businesses']['Row']>;
+        Relationships: [
+          {
+            foreignKeyName: 'saved_businesses_business_id_fkey';
+            columns: ['business_id'];
+            referencedRelation: 'businesses';
             referencedColumns: ['id'];
           }
         ];
