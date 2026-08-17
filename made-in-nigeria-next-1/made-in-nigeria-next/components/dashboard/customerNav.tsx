@@ -22,7 +22,7 @@ export function getCustomerNav(active: CustomerNavKey): DashboardNavSection[] {
           ),
         },
         {
-          href: '#',
+          href: '/account/orders',
           label: 'Orders',
           active: active === 'orders',
           icon: (
@@ -30,7 +30,7 @@ export function getCustomerNav(active: CustomerNavKey): DashboardNavSection[] {
           ),
         },
         {
-          href: '#',
+          href: '/account/saved-businesses',
           label: 'Saved Businesses',
           active: active === 'saved-businesses',
           icon: (
@@ -38,7 +38,7 @@ export function getCustomerNav(active: CustomerNavKey): DashboardNavSection[] {
           ),
         },
         {
-          href: '#',
+          href: '/account/reviews',
           label: 'My Reviews',
           active: active === 'reviews',
           icon: (
