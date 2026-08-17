@@ -3,6 +3,7 @@ import Link from 'next/link';
 import Stamp from '@/components/ui/Stamp';
 import Badge from '@/components/ui/Badge';
 import Tabs from '@/components/ui/Tabs';
+import SaveBusinessButton from '@/components/business/SaveBusinessButton';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
@@ -57,6 +58,21 @@ export default async function BusinessProfilePage({
   if (!business) notFound();
   const biz: Business = business as Business;
 
+  const {
+    data: { user: currentUser },
+  } = await supabase.auth.getUser();
+
+  let initiallySaved = false;
+  if (currentUser) {
+    const { data: savedRow } = await supabase
+      .from('saved_businesses')
+      .select('id')
+      .eq('customer_id', currentUser.id)
+      .eq('business_id', biz.id)
+      .maybeSingle();
+    initiallySaved = !!savedRow;
+  }
+
   const { data: productsData } = await supabase
     .from('products')
     .select('*')
@@ -102,7 +118,7 @@ export default async function BusinessProfilePage({
               <div className="biz-meta">{biz.category}{locationParts && <> &middot; {locationParts}</>}</div>
             </div>
             <div className="profile-actions">
-              <button className="btn btn-outline btn-sm" type="button">Follow</button>
+              <SaveBusinessButton businessId={biz.id} initiallySaved={initiallySaved} />
               <button className="btn btn-primary btn-sm" type="button">Message</button>
             </div>
           </div>
