@@ -7,10 +7,11 @@ import { createClient } from '@/lib/supabase/client';
 interface SettingsFormProps {
   userId: string;
   currentFullName: string;
+  currentPhone: string;
   currentEmail: string;
 }
 
-export default function SettingsForm({ userId, currentFullName, currentEmail }: SettingsFormProps) {
+export default function SettingsForm({ userId, currentFullName, currentPhone, currentEmail }: SettingsFormProps) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -27,6 +28,7 @@ export default function SettingsForm({ userId, currentFullName, currentEmail }: 
 
     const form = new FormData(e.currentTarget);
     const fullName = String(form.get('full_name') ?? '').trim();
+    const phone = String(form.get('phone') ?? '').trim();
 
     if (!fullName) {
       setNameError('Name cannot be empty.');
@@ -35,8 +37,9 @@ export default function SettingsForm({ userId, currentFullName, currentEmail }: 
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase.from('profiles') as any).update({ full_name: fullName }).eq('id', userId);
+    const { error } = await (supabase.from('profiles') as any)
+      .update({ full_name: fullName, phone: phone || null })
+      .eq('id', userId);
 
     if (error) {
       setNameError(error.message);
@@ -117,14 +120,22 @@ export default function SettingsForm({ userId, currentFullName, currentEmail }: 
   return (
     <>
       <div className="widget span-4">
-        <div className="widget-head"><h3>Name</h3></div>
+        <div className="widget-head"><h3>Profile</h3></div>
         <form onSubmit={handleNameSubmit}>
-          <div className="field">
-            <label htmlFor="full_name">Full name</label>
-            <input id="full_name" name="full_name" type="text" defaultValue={currentFullName} required />
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="full_name">Full name</label>
+              <input id="full_name" name="full_name" type="text" defaultValue={currentFullName} required />
+            </div>
+            <div className="field">
+              <label htmlFor="phone">
+                Phone <span className="hint">(optional)</span>
+              </label>
+              <input id="phone" name="phone" type="tel" defaultValue={currentPhone} placeholder="+234 800 000 0000" />
+            </div>
           </div>
           <button type="submit" className="btn btn-primary btn-sm" disabled={nameLoading}>
-            {nameLoading ? 'Saving…' : 'Save Name'}
+            {nameLoading ? 'Saving…' : 'Save Profile'}
           </button>
           {nameError && (
             <div style={{ marginTop: 12, fontSize: 13, color: '#9A3B2E', background: '#FBEAE7', padding: 10, borderRadius: 10 }}>
@@ -133,7 +144,7 @@ export default function SettingsForm({ userId, currentFullName, currentEmail }: 
           )}
           {nameSaved && !nameError && (
             <div style={{ marginTop: 12, fontSize: 13, color: 'var(--forest-800)', background: 'var(--forest-050)', padding: 10, borderRadius: 10 }}>
-              Name updated.
+              Profile updated.
             </div>
           )}
         </form>
