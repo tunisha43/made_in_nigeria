@@ -8,6 +8,7 @@ type Order = Database['public']['Tables']['orders']['Row'];
 type Product = Database['public']['Tables']['products']['Row'];
 type Business = Database['public']['Tables']['businesses']['Row'];
 type Review = Database['public']['Tables']['reviews']['Row'];
+type SavedBusiness = Database['public']['Tables']['saved_businesses']['Row'];
 
 export const metadata = {
   title: 'My Account',
@@ -44,6 +45,12 @@ export default async function CustomerDashboardPage() {
     .eq('customer_id', user.id);
   const myReviews = (reviewsData as Review[] | null) ?? [];
 
+  const { data: savedData } = await supabase
+    .from('saved_businesses')
+    .select('*')
+    .eq('customer_id', user.id);
+  const savedBusinesses = (savedData as SavedBusiness[] | null) ?? [];
+
   const pendingOrders = orders.filter((o) => o.status === 'pending');
   const deliveredOrders = orders.filter((o) => o.status === 'delivered');
   const recentOrders = orders.slice(0, 3);
@@ -73,8 +80,8 @@ export default async function CustomerDashboardPage() {
       </div>
       <div className="widget span-1 stat-widget">
         <div className="widget-head"><h3>Saved Businesses</h3></div>
-        <div className="figure">—</div>
-        <div className="delta delta-flat">Not built yet</div>
+        <div className="figure">{savedBusinesses.length}</div>
+        <div className="delta delta-flat">Following</div>
       </div>
 
       <div className="widget span-4">
