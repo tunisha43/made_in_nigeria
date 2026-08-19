@@ -49,7 +49,7 @@ export default async function AnalyticsPage() {
   const deliveredOrders = orders.filter((o) => o.status === 'delivered');
   const pendingOrders = orders.filter((o) => o.status === 'pending');
   const revenueKobo = deliveredOrders.reduce(
-    (sum, o) => sum + (o.product_id ? priceById.get(o.product_id) ?? 0 : 0),
+    (sum, o) => sum + (o.product_id ? priceById.get(o.product_id) ?? 0 : 0) * o.quantity,
     0
   );
   const fulfillmentRate = orders.length > 0 ? Math.round((deliveredOrders.length / orders.length) * 100) : null;
