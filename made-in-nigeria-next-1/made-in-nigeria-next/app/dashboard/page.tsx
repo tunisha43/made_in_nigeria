@@ -1,190 +1,202 @@
+import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import DashboardShell from '@/components/dashboard/DashboardShell';
-import { getBusinessNav } from '@/components/dashboard/businessNav';
-import { requireRole } from '@/lib/auth/requireRole';
+import Badge from '@/components/ui/Badge';
+import Stamp from '@/components/ui/Stamp';
+import Tabs from '@/components/ui/Tabs';
+import ProductGallery from '@/components/product/ProductGallery';
+import OrderPanel from '@/components/product/OrderPanel';
+import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
+type Product = Database['public']['Tables']['products']['Row'];
 type Business = Database['public']['Tables']['businesses']['Row'];
+type Review = Database['public']['Tables']['reviews']['Row'];
 
-export const metadata = {
-  title: 'Dashboard',
-};
+const THUMBS = ['thumb-1', 'thumb-2', 'thumb-3', 'thumb-4', 'thumb-5', 'thumb-6'];
 
-export default async function BusinessDashboardPage() {
-  const { user, profile, supabase } = await requireRole(['business_owner']);
+function formatNaira(kobo: number): string {
+  return `₦${(kobo / 100).toLocaleString('en-NG')}`;
+}
 
-  const { data } = await supabase
+export default async function ProductDetailPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const supabase = await createClient();
+
+  const { data: productData } = await supabase
+    .from('products')
+    .select('*')
+    .eq('slug', slug)
+    .single();
+  const product = productData as Product | null;
+  if (!product) notFound();
+  const item: Product = product as Product;
+
+  const { data: businessData } = await supabase
     .from('businesses')
     .select('*')
-    .eq('owner_id', user.id)
+    .eq('id', item.business_id)
     .single();
+  const business = businessData as Business | null;
+  // A product should never outlive its business given the foreign key, but
+  // guard anyway rather than crash rendering if data is ever inconsistent.
+  if (!business) notFound();
+  const seller: Business = business as Business;
 
-  // Explicit cast rather than trusting the generic chain -- see the long
-  // comment in lib/auth/requireRole.ts for why.
-  const business = data as Business | null;
+  const { data: relatedData } = await supabase
+    .from('products')
+    .select('*')
+    .eq('business_id', seller.id)
+    .neq('id', item.id)
+    .limit(4);
+  const related = (relatedData as Product[] | null) ?? [];
 
-  // A business_owner account with no business row yet (e.g. they signed up
-  // but never finished Register, or Register failed) shouldn't see a broken
-  // dashboard referencing a business that doesn't exist -- send them to
-  // finish that step instead.
-  if (!business) {
-    redirect('/register');
+  const { data: reviewsData } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('product_id', item.id)
+    .order('created_at', { ascending: false });
+  const reviews = (reviewsData as Review[] | null) ?? [];
+
+  const reviewerIds = [...new Set(reviews.map((r) => r.customer_id))];
+  const { data: reviewersData } = reviewerIds.length
+    ? await supabase.from('profiles').select('*').in('id', reviewerIds)
+    : { data: [] as { id: string; full_name: string }[] };
+  const reviewerNameById = new Map((reviewersData ?? []).map((p) => [p.id, p.full_name]));
+
+  function reviewerLabel(customerId: string): string {
+    const fullName = reviewerNameById.get(customerId);
+    if (!fullName) return 'A Customer';
+    const parts = fullName.trim().split(/\s+/);
+    return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0];
   }
-  const biz: Business = business as Business;
+
+  const avgRating =
+    reviews.length > 0 ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) : null;
+
+  // No real product photos exist yet (Supabase Storage isn't wired up) --
+  // one deterministic placeholder gradient stands in, picked from the
+  // product id so it's at least stable across page loads.
+  const thumbIndex = item.id.charCodeAt(0) % THUMBS.length;
+  const isSellerVerified = seller.verification_level !== 'registered';
+  const locationParts = [seller.city, seller.state].filter(Boolean).join(', ');
 
   return (
-    <DashboardShell
-      navSections={getBusinessNav(biz.slug, 'dashboard')}
-      signedInAs={profile.full_name || 'Business Owner'}
-      signedInSubtext={`${biz.name} · ${biz.min_id ?? 'ID pending'}`}
-      welcomeTitle={`Welcome, ${profile.full_name?.split(' ')[0] || 'there'}.`}
-      welcomeSubtitle={`Here's how ${biz.name} is doing today.`}
-    >
-      <div className="widget span-2">
-        <div className="widget-head"><h3>Business Health Score</h3><span className="w-link">Why this score?</span></div>
-        <div className="health-score">
-          <div className="gauge" style={{ ['--pct' as string]: 92 } as React.CSSProperties}><span className="gauge-num">92%</span></div>
-          <p className="health-copy">Strong across verification and response time. <b>Add 3 more product photos</b> to lift your Discovery score this week.</p>
-        </div>
+    <>
+      <div className="wrap breadcrumb">
+        <Link href="/">Home</Link> / <Link href="/marketplace">Marketplace</Link> / {item.name}
       </div>
 
-      <div className="widget span-2">
-        <div className="widget-head"><h3>Today&apos;s Tasks</h3><span className="w-link">View all</span></div>
-        <div className="task-list">
-          <div className="task-item done">
-            <span className="task-check">
-              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}><path d="M5 13l4 4L19 7" /></svg>
-            </span>
-            <span>Reply to 2 new customer messages</span>
+      <section className="wrap product-grid">
+        <ProductGallery images={[THUMBS[thumbIndex]]} />
+
+        <div>
+          <div className="product-cat">{seller.category}</div>
+          <h1 className="product-title">{item.name}</h1>
+
+          <div className="price-block">
+            <span className="price-now">{formatNaira(item.price_kobo)}</span>
+            {item.compare_at_price_kobo && item.compare_at_price_kobo > item.price_kobo && (
+              <span className="price-was">{formatNaira(item.compare_at_price_kobo)}</span>
+            )}
           </div>
-          <div className="task-item"><span className="task-check" /><span>Confirm shipment for order #1042</span></div>
-          <div className="task-item"><span className="task-check" /><span>Upload export documentation</span></div>
-          <div className="task-item"><span className="task-check" /><span>Post this week&apos;s Business Diary entry</span></div>
-        </div>
-      </div>
+          {item.description && (
+            <p style={{ fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.6, marginTop: 10 }}>
+              {item.description}
+            </p>
+          )}
 
-      <div className="widget span-3">
-        <div className="widget-head"><h3>Weekly Sales / Revenue</h3><span className="w-link">Full report</span></div>
-        <div className="rev-figure">&#8358;186,400 <span className="rev-delta">+12% vs last week</span></div>
-        <div className="bar-chart">
-          {[38, 52, 34, 70, 100, 61, 47].map((h, i) => (
-            <div className={`bar${i === 4 ? ' peak' : ''}`} style={{ height: `${h}%` }} key={i}>
-              <span style={{ height: '100%' }} />
+          <Link href={`/business/${seller.slug}`} className="seller-row">
+            <div className={`seller-avatar ${THUMBS[(thumbIndex + 1) % THUMBS.length]}`} aria-hidden="true" />
+            <div style={{ flex: 1 }}>
+              <div className="name">{seller.name}</div>
+              <div className="meta">{locationParts || seller.category} &middot; {seller.min_id ?? 'ID pending'}</div>
             </div>
-          ))}
-        </div>
-        <div className="bar-labels">
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <span key={d}>{d}</span>)}
-        </div>
-      </div>
+            {isSellerVerified && <Badge variant="verified">Verified</Badge>}
+          </Link>
 
-      <div className="widget span-1">
-        <div className="widget-head"><h3>Ranking</h3></div>
-        <div className="rank-badge">
-          <div className="rank-num">#3</div>
-          <p style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>of 41 in {biz.category}, {biz.state ?? 'your state'}</p>
-        </div>
-      </div>
+          <OrderPanel businessId={seller.id} productId={item.id} />
 
-      <div className="widget span-2">
-        <div className="widget-head"><h3>Orders</h3><span className="w-link">Manage</span></div>
-        <div className="order-row"><span className="dot-tag"><span className="dot-sm" style={{ background: 'var(--gold-500)' }} />Pending</span><b>4</b></div>
-        <div className="order-row"><span className="dot-tag"><span className="dot-sm" style={{ background: 'var(--forest-600)' }} />Processing</span><b>7</b></div>
-        <div className="order-row"><span className="dot-tag"><span className="dot-sm" style={{ background: 'var(--clay)' }} />Shipped</span><b>3</b></div>
-        <div className="order-row"><span className="dot-tag"><span className="dot-sm" style={{ background: 'var(--ink-soft)' }} />Completed this week</span><b>15</b></div>
-      </div>
-
-      <div className="widget span-1 stat-widget">
-        <div className="widget-head"><h3>Customers</h3></div>
-        <div className="figure">312</div>
-        <div className="delta delta-up">+9 this week</div>
-        <div className="spark" aria-hidden="true">
-          {[40, 55, 35, 70, 60, 85, 100].map((h, i) => (
-            <i key={i} style={{ height: `${h}%`, ...(i === 6 ? { background: 'var(--forest-700)' } : {}) }} />
-          ))}
-        </div>
-      </div>
-
-      <div className="widget span-1 stat-widget">
-        <div className="widget-head"><h3>Followers</h3></div>
-        <div className="figure">548</div>
-        <div className="delta delta-up">+21 this week</div>
-      </div>
-
-      <div className="widget span-1">
-        <div className="widget-head"><h3>Reviews</h3><span className="w-link">All</span></div>
-        <div className="review-mini">
-          <div className="stamp" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-1.5z" /></svg>
-          </div>
-          <div>
-            <div className="stars">&#9733;&#9733;&#9733;&#9733;&#9733; &middot; Chika O.</div>
-            <p>&quot;Fast delivery and the Adire quality was even better than the photos.&quot;</p>
+          <div className="trust-mini">
+            <div className="trust-mini-item">
+              <Stamp>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M5 13l4 4L19 7" /></svg>
+              </Stamp>
+              {isSellerVerified ? 'Verified seller' : 'Registered seller'}
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="widget span-1">
-        <div className="widget-head"><h3>Community</h3></div>
-        <p style={{ fontSize: 13, color: 'var(--ink-soft)', lineHeight: 1.6 }}>
-          <b style={{ color: 'var(--forest-800)', fontFamily: 'var(--font-mono)' }}>6 Builders</b> are actively
-          supporting your business this month through reviews and shares.
-        </p>
-      </div>
-
-      <div className="widget span-2">
-        <div className="widget-head"><h3>AI CEO Suggestions</h3><span className="w-link">Talk to AI</span></div>
-        <div className="ai-card">
-          <div className="ai-tag">DISCOVERY</div>
-          <p>Businesses with 5+ product photos get found 3&times; more often in search. You currently have 2.</p>
+      <section className="section section-alt">
+        <div className="wrap">
+          <Tabs
+            tabs={[
+              {
+                key: 'description',
+                label: 'Description',
+                panel: (
+                  <div style={{ maxWidth: '70ch', marginTop: 26, fontSize: 14.5, color: 'var(--ink-soft)', lineHeight: 1.7 }}>
+                    {item.description || 'No additional description provided for this product yet.'}
+                  </div>
+                ),
+              },
+              {
+                key: 'reviews',
+                label: 'Reviews',
+                panel:
+                  reviews.length > 0 ? (
+                    <div style={{ marginTop: 26, maxWidth: 480 }}>
+                      <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 12 }}>
+                        {avgRating} average &middot; {reviews.length} review{reviews.length === 1 ? '' : 's'}
+                      </p>
+                      {reviews.map((review) => (
+                        <div className="review-item" key={review.id}>
+                          <div className="review-head">
+                            <span>{reviewerLabel(review.customer_id)}</span>
+                            <span>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
+                          </div>
+                          {review.comment && <p>&quot;{review.comment}&quot;</p>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="empty-state" style={{ marginTop: 26, maxWidth: 480 }}>
+                      No reviews yet. Be the first to review this product after your order arrives.
+                    </div>
+                  ),
+              },
+            ]}
+          />
         </div>
-        <div className="ai-card">
-          <div className="ai-tag">PRICING</div>
-          <p>Similar verified sellers in {biz.state ?? 'your state'} price similar items competitively. You&apos;re within range.</p>
-        </div>
-      </div>
+      </section>
 
-      <div className="widget span-2">
-        <div className="widget-head"><h3>Team Activity</h3><span className="w-link">Manage team</span></div>
-        <div className="team-row">
-          <div className="team-avatar" style={{ background: 'var(--forest-700)' }}>AD</div>
-          <div><div className="name">Adaeze &mdash; Owner</div><div className="act">Updated product photos &middot; 2h ago</div></div>
-          <span className="status-dot" style={{ background: 'var(--forest-700)' }} />
-        </div>
-        <div className="team-row">
-          <div className="team-avatar" style={{ background: 'var(--clay)' }}>KE</div>
-          <div><div className="name">Kelechi &mdash; Fulfillment</div><div className="act">Marked order #1039 shipped &middot; 5h ago</div></div>
-          <span className="status-dot" style={{ background: 'var(--ink-soft)' }} />
-        </div>
-      </div>
-
-      <div className="widget span-2">
-        <div className="widget-head"><h3>Savings Progress</h3></div>
-        <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>Goal: new dyeing equipment</p>
-        <div className="progress-track"><div className="progress-fill" style={{ width: '64%' }} /></div>
-        <div className="progress-meta"><span>&#8358;128,000 saved</span><span>Goal: &#8358;200,000</span></div>
-      </div>
-
-      <div className="widget span-2">
-        <div className="widget-head"><h3>Investment Readiness</h3><Link href="/investor-hub" className="w-link">Investor Hub</Link></div>
-        <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>3 of 5 requirements complete for pitch visibility</p>
-        <div className="progress-track"><div className="progress-fill" style={{ width: '60%' }} /></div>
-        <div className="progress-meta"><span>Financials, verification done</span><span>Pitch deck pending</span></div>
-      </div>
-
-      <div className="widget span-2">
-        <div className="widget-head"><h3>Upcoming Events</h3><Link href="/events" className="w-link">All events</Link></div>
-        <div className="order-row"><span>Aba Textile Makers &mdash; Meetup</span><b style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12.5 }}>Aug 14</b></div>
-        <div className="order-row"><span>Made in Nigeria &mdash; Export Readiness Workshop</span><b style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12.5 }}>Aug 22</b></div>
-      </div>
-
-      <div className="widget span-2">
-        <div className="widget-head"><h3>Notifications</h3><span className="w-link">Clear all</span></div>
-        <div className="notif-item"><span className="notif-dot" /><div><p>Your Advanced Verification was approved.</p><span className="notif-time">3h ago</span></div></div>
-        <div className="notif-item"><span className="notif-dot" style={{ background: 'var(--forest-600)' }} /><div><p>Chika O. left a 5-star review.</p><span className="notif-time">1d ago</span></div></div>
-        <div className="notif-item"><span className="notif-dot" style={{ background: 'var(--clay)' }} /><div><p>Kelechi joined your team.</p><span className="notif-time">3d ago</span></div></div>
-      </div>
-    </DashboardShell>
+      {related.length > 0 && (
+        <section className="section">
+          <div className="wrap">
+            <div className="section-head">
+              <div>
+                <div className="eyebrow">From the same seller</div>
+                <h2>More from {seller.name}</h2>
+              </div>
+            </div>
+            <div className="card-grid">
+              {related.map((p, i) => (
+                <Link key={p.slug} href={`/product/${p.slug}`} className="biz-card">
+                  <div className={`biz-thumb ${THUMBS[i % THUMBS.length]}`} />
+                  <div className="biz-body">
+                    <h4>{p.name}</h4>
+                    <div className="biz-meta">{formatNaira(p.price_kobo)}</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+    </>
   );
 }
