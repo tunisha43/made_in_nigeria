@@ -4,8 +4,7 @@ import Badge from '@/components/ui/Badge';
 import Stamp from '@/components/ui/Stamp';
 import Tabs from '@/components/ui/Tabs';
 import ProductGallery from '@/components/product/ProductGallery';
-import QtyStepper from '@/components/product/QtyStepper';
-import PlaceOrderButton from '@/components/product/PlaceOrderButton';
+import OrderPanel from '@/components/product/OrderPanel';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
@@ -119,19 +118,7 @@ export default async function ProductDetailPage({
             {isSellerVerified && <Badge variant="verified">Verified</Badge>}
           </Link>
 
-          <div className="qty-row">
-            <QtyStepper />
-            <span style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>
-              Seller will confirm delivery timing after ordering
-            </span>
-          </div>
-
-          <div className="product-actions">
-            <PlaceOrderButton businessId={seller.id} productId={item.id} />
-            <Link href="/auth" className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }}>
-              Message Seller
-            </Link>
-          </div>
+          <OrderPanel businessId={seller.id} productId={item.id} />
 
           <div className="trust-mini">
             <div className="trust-mini-item">
