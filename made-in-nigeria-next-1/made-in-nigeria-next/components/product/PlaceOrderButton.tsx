@@ -7,9 +7,10 @@ import { createClient } from '@/lib/supabase/client';
 interface PlaceOrderButtonProps {
   businessId: string;
   productId: string;
+  quantity: number;
 }
 
-export default function PlaceOrderButton({ businessId, productId }: PlaceOrderButtonProps) {
+export default function PlaceOrderButton({ businessId, productId, quantity }: PlaceOrderButtonProps) {
   const router = useRouter();
   const supabase = createClient();
   const [loading, setLoading] = useState(false);
@@ -29,12 +30,17 @@ export default function PlaceOrderButton({ businessId, productId }: PlaceOrderBu
       return;
     }
 
-    const payload = { business_id: businessId, product_id: productId, customer_id: user.id, status: 'pending' };
+    const payload = {
+      business_id: businessId,
+      product_id: productId,
+      customer_id: user.id,
+      status: 'pending',
+      quantity,
+    };
 
     // Cast at the call site rather than trusting supabase-js's generic
     // resolution here -- see the long comment in types/database.ts and
     // lib/auth/requireRole.ts.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: insertError } = await (supabase.from('orders') as any).insert(payload);
 
@@ -51,7 +57,7 @@ export default function PlaceOrderButton({ businessId, productId }: PlaceOrderBu
   if (placed) {
     return (
       <div style={{ padding: '13px 18px', borderRadius: 10, background: 'var(--forest-050)', color: 'var(--forest-800)', fontSize: 14, textAlign: 'center', flex: 1 }}>
-        Order placed — the seller will follow up to arrange delivery.
+        Order placed ({quantity} unit{quantity === 1 ? '' : 's'}) — the seller will follow up to arrange delivery.
       </div>
     );
   }
