@@ -12,6 +12,7 @@ export interface OrderDisplay {
   businessName: string;
   businessId: string;
   productId: string | null;
+  quantity: number;
 }
 
 interface ReviewFormInlineProps {
@@ -150,6 +151,7 @@ export default function OrdersWithReviews({ orders, reviewedOrderIds }: OrdersWi
                   style={{ background: order.status === 'delivered' ? 'var(--forest-600)' : 'var(--gold-500)' }}
                 />
                 {order.productName} &middot; {order.businessName}
+                {order.quantity > 1 && <> &times; {order.quantity}</>}
               </span>
               {canReview && (
                 <button
