@@ -18,7 +18,12 @@ export default async function SettingsPage() {
       welcomeTitle="Settings"
       welcomeSubtitle="Update your name, email, and password."
     >
-      <SettingsForm userId={user.id} currentFullName={profile.full_name || ''} currentEmail={user.email ?? ''} />
+      <SettingsForm
+        userId={user.id}
+        currentFullName={profile.full_name || ''}
+        currentPhone={profile.phone || ''}
+        currentEmail={user.email ?? ''}
+      />
     </DashboardShell>
   );
 }
