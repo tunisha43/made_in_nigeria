@@ -1,0 +1,18 @@
+'use client';
+import { FormEvent, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+
+function slugify(value: string) { return value.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + Math.floor(1000 + Math.random()*9000); }
+
+export function CommunityPostForm({ businessId, sector }: { businessId: string; sector: string }) {
+  const router=useRouter(); const supabase=createClient(); const [loading,setLoading]=useState(false); const [error,setError]=useState('');
+  async function submit(e:FormEvent<HTMLFormElement>) { e.preventDefault(); setLoading(true); setError(''); const f=new FormData(e.currentTarget); const body=String(f.get('body')||'').trim(); const title=String(f.get('title')||'').trim(); if(!body){setError('Write something before publishing.');setLoading(false);return;} const {error}=await (supabase.from('community_posts') as any).insert({business_id:businessId,sector,title:title||null,body,status:'published'}); if(error)setError(error.message); else {e.currentTarget.reset();router.refresh();} setLoading(false); }
+  return <form onSubmit={submit}><div className="field"><label>Post title <span className="hint">(optional)</span></label><input name="title" placeholder="What are you working on?" /></div><div className="field"><label>Community post</label><textarea name="body" rows={4} placeholder="Share a lesson, question, milestone or useful insight…" required /></div><button className="btn btn-primary btn-sm" disabled={loading}>{loading?'Publishing…':'Publish to Community'}</button>{error&&<p style={{color:'#9A3B2E',marginTop:10,fontSize:13}}>{error}</p>}</form>;
+}
+
+export function StoryForm({ businessId }: { businessId: string }) {
+  const router=useRouter(); const supabase=createClient(); const [loading,setLoading]=useState(false); const [error,setError]=useState('');
+  async function submit(e:FormEvent<HTMLFormElement>) { e.preventDefault(); setLoading(true); setError(''); const f=new FormData(e.currentTarget); const title=String(f.get('title')||'').trim(), excerpt=String(f.get('excerpt')||'').trim(), content=String(f.get('content')||'').trim(), type=String(f.get('type')||'Founder Story'); if(!title||!content){setError('Add a title and story content.');setLoading(false);return;} const slug=slugify(title); const {error}=await (supabase.from('stories') as any).insert({business_id:businessId,slug,title,excerpt:excerpt||null,content,story_type:type,status:'published',featured:false,published_at:new Date().toISOString()}); if(error)setError(error.code==='23505'?'That story title produced a duplicate slug. Please try again.':error.message); else {e.currentTarget.reset();router.refresh();} setLoading(false); }
+  return <form onSubmit={submit}><div className="field"><label>Story title</label><input name="title" placeholder="e.g. How we built our first export order" required /></div><div className="field"><label>Story type</label><select name="type" defaultValue="Founder Story"><option>Founder Story</option><option>Behind the Business</option><option>Innovation Story</option><option>Community Impact</option></select></div><div className="field"><label>Short excerpt</label><textarea name="excerpt" rows={2} placeholder="A short introduction shown on the Featured Stories page." /></div><div className="field"><label>Story</label><textarea name="content" rows={8} placeholder="Tell the story using facts and experiences your business can stand behind." required /></div><button className="btn btn-primary btn-sm" disabled={loading}>{loading?'Publishing…':'Publish Story'}</button>{error&&<p style={{color:'#9A3B2E',marginTop:10,fontSize:13}}>{error}</p>}</form>;
+}
