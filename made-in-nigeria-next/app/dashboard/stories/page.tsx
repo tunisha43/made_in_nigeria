@@ -1,0 +1,10 @@
+import Link from 'next/link';
+import DashboardShell from '@/components/dashboard/DashboardShell';
+import { getBusinessNav } from '@/components/dashboard/businessNav';
+import { requireRole } from '@/lib/auth/requireRole';
+import { StoryForm } from '@/components/dashboard/BusinessContentForm';
+import type { Database } from '@/types/database';
+
+type Story = Database['public']['Tables']['stories']['Row'];
+export const metadata={title:'Business Stories'};
+export default async function BusinessStoriesPage(){ const {user,profile,supabase}=await requireRole(['business_owner']); const {data:biz}=await supabase.from('businesses').select('*').eq('owner_id',user.id).maybeSingle(); if(!biz)return <div className="wrap section"><h1>Create your business first</h1><Link href="/register" className="btn btn-primary">Create business</Link></div>; const {data}=await supabase.from('stories').select('*').eq('business_id',biz.id).order('created_at',{ascending:false}); const stories=(data as Story[]|null)??[]; return <DashboardShell navSections={getBusinessNav(biz.slug,'stories')} signedInAs={profile.full_name||'Business Owner'} signedInSubtext={biz.name} welcomeTitle="Featured Stories" welcomeSubtitle="Turn real business moments into stories that connect customers and the community to your brand."><div className="widget span-2"><div className="widget-head"><h3>Create a story</h3></div><StoryForm businessId={biz.id}/></div><div className="widget span-2"><div className="widget-head"><h3>Your published stories</h3></div>{stories.length===0?<div className="empty-state">You have not published a story yet.</div>:stories.map(s=><div className="order-row" key={s.id}><div><b>{s.title}</b><div style={{fontSize:12,color:'var(--ink-soft)'}}>{s.story_type} · {s.status}</div></div><Link href={s.status==='published'?`/stories/${s.slug}`:'/dashboard/stories'} className="btn btn-outline btn-sm">View</Link></div>)}</div><div className="widget span-4"><Link href="/stories" className="section-link">Open public Featured Stories →</Link></div></DashboardShell> }
