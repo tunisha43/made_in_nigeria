@@ -42,7 +42,8 @@ export default function VerificationForm({ business, submission, documents }: { 
       setLoading(false); return;
     }
 
-    const { error: businessError } = await supabase.from('businesses').update({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: businessError } = await (supabase.from('businesses') as any).update({
       name: businessName.trim(), category: category.trim(), city: city.trim() || null, state: state.trim() || null,
     }).eq('id', business.id);
     if (businessError) { setMessage({ type: 'error', text: businessError.message }); setLoading(false); return; }
@@ -55,11 +56,13 @@ export default function VerificationForm({ business, submission, documents }: { 
       const path = `${business.id}/${doc.key}-${Date.now()}-${safeName}`;
       const { error: uploadError } = await supabase.storage.from('verification-documents').upload(path, file, { upsert: false, contentType: file.type || undefined });
       if (uploadError) { setMessage({ type: 'error', text: `Could not upload ${doc.label}: ${uploadError.message}` }); setLoading(false); return; }
-      const { error: docError } = await supabase.from('business_verification_documents').insert({ business_id: business.id, document_type: doc.key, file_name: file.name, storage_path: path, mime_type: file.type || null, size_bytes: file.size });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: docError } = await (supabase.from('business_verification_documents') as any).insert({ business_id: business.id, document_type: doc.key, file_name: file.name, storage_path: path, mime_type: file.type || null, size_bytes: file.size });
       if (docError) { setMessage({ type: 'error', text: `Could not save ${doc.label}: ${docError.message}` }); setLoading(false); return; }
     }
 
-    const { error: submissionError } = await supabase.from('business_verification_submissions').upsert({ business_id: business.id, status: 'pending', notes: notes.trim() || null, submitted_at: new Date().toISOString() }, { onConflict: 'business_id' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: submissionError } = await (supabase.from('business_verification_submissions') as any).upsert({ business_id: business.id, status: 'pending', notes: notes.trim() || null, submitted_at: new Date().toISOString() }, { onConflict: 'business_id' });
     if (submissionError) { setMessage({ type: 'error', text: submissionError.message }); setLoading(false); return; }
 
     setMessage({ type: 'success', text: 'Your verification submission has been sent for review.' });
