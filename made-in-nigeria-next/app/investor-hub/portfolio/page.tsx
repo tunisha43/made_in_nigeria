@@ -1,5 +1,0 @@
-import Link from 'next/link';
-import InvestorPage from '@/components/investor/InvestorPage';
-import { requireRole } from '@/lib/auth/requireRole';
-import { getInvestorSnapshot, naira } from '@/lib/investor/data';
-export default async function PortfolioPage(){const {user}=await requireRole(['investor']); const s=await getInvestorSnapshot(user.id); return <InvestorPage active="portfolio" title="Portfolio businesses" subtitle="Track the businesses and positions you currently hold."><div className="widget span-4"><div className="widget-head"><h3>Holdings</h3><Link href="/investor-hub/opportunities" className="btn btn-primary btn-sm">Find new opportunities</Link></div>{s.investments.map(x=><div className="order-row" key={x.id}><span><b>{x.business_name}</b><br/><small>{x.category} · Invested {naira(x.invested_kobo)}</small></span><span style={{textAlign:'right'}}><b>{naira(x.current_value_kobo)}</b><br/><small style={{color:'var(--forest-700)'}}>+{x.return_pct}%</small></span></div>)}</div></InvestorPage>}
