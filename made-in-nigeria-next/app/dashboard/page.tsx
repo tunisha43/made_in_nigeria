@@ -1,202 +1,133 @@
-import { notFound } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import Badge from '@/components/ui/Badge';
-import Stamp from '@/components/ui/Stamp';
-import Tabs from '@/components/ui/Tabs';
-import ProductGallery from '@/components/product/ProductGallery';
-import OrderPanel from '@/components/product/OrderPanel';
-import { createClient } from '@/lib/supabase/server';
+import DashboardShell from '@/components/dashboard/DashboardShell';
+import { getBusinessNav } from '@/components/dashboard/businessNav';
+import { requireRole } from '@/lib/auth/requireRole';
 import type { Database } from '@/types/database';
 
-type Product = Database['public']['Tables']['products']['Row'];
 type Business = Database['public']['Tables']['businesses']['Row'];
-type Review = Database['public']['Tables']['reviews']['Row'];
+type Product = Database['public']['Tables']['products']['Row'];
+type Order = Database['public']['Tables']['orders']['Row'];
 
-const THUMBS = ['thumb-1', 'thumb-2', 'thumb-3', 'thumb-4', 'thumb-5', 'thumb-6'];
+export const metadata = {
+  title: 'Dashboard',
+};
 
 function formatNaira(kobo: number): string {
   return `₦${(kobo / 100).toLocaleString('en-NG')}`;
 }
 
-export default async function ProductDetailPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
-  const supabase = await createClient();
-
-  const { data: productData } = await supabase
-    .from('products')
-    .select('*')
-    .eq('slug', slug)
-    .single();
-  const product = productData as Product | null;
-  if (!product) notFound();
-  const item: Product = product as Product;
+export default async function BusinessDashboardPage() {
+  const { user, profile, supabase } = await requireRole(['business_owner']);
 
   const { data: businessData } = await supabase
     .from('businesses')
     .select('*')
-    .eq('id', item.business_id)
+    .eq('owner_id', user.id)
     .single();
+
   const business = businessData as Business | null;
-  // A product should never outlive its business given the foreign key, but
-  // guard anyway rather than crash rendering if data is ever inconsistent.
-  if (!business) notFound();
-  const seller: Business = business as Business;
+  if (!business) redirect('/register');
+  const biz: Business = business as Business;
 
-  const { data: relatedData } = await supabase
-    .from('products')
-    .select('*')
-    .eq('business_id', seller.id)
-    .neq('id', item.id)
-    .limit(4);
-  const related = (relatedData as Product[] | null) ?? [];
+  const [{ data: productsData }, { data: ordersData }] = await Promise.all([
+    supabase
+      .from('products')
+      .select('*')
+      .eq('business_id', biz.id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('orders')
+      .select('*')
+      .eq('business_id', biz.id)
+      .order('created_at', { ascending: false }),
+  ]);
 
-  const { data: reviewsData } = await supabase
-    .from('reviews')
-    .select('*')
-    .eq('product_id', item.id)
-    .order('created_at', { ascending: false });
-  const reviews = (reviewsData as Review[] | null) ?? [];
+  const products = (productsData as Product[] | null) ?? [];
+  const orders = (ordersData as Order[] | null) ?? [];
+  const pendingOrders = orders.filter((order) => order.status === 'pending');
+  const deliveredOrders = orders.filter((order) => order.status === 'delivered');
 
-  const reviewerIds = [...new Set(reviews.map((r) => r.customer_id))];
-  const { data: reviewersData } = reviewerIds.length
-    ? await supabase.from('profiles').select('*').in('id', reviewerIds)
-    : { data: [] as { id: string; full_name: string }[] };
-  const reviewerNameById = new Map((reviewersData ?? []).map((p) => [p.id, p.full_name]));
-
-  function reviewerLabel(customerId: string): string {
-    const fullName = reviewerNameById.get(customerId);
-    if (!fullName) return 'A Customer';
-    const parts = fullName.trim().split(/\s+/);
-    return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0];
-  }
-
-  const avgRating =
-    reviews.length > 0 ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) : null;
-
-  // No real product photos exist yet (Supabase Storage isn't wired up) --
-  // one deterministic placeholder gradient stands in, picked from the
-  // product id so it's at least stable across page loads.
-  const thumbIndex = item.id.charCodeAt(0) % THUMBS.length;
-  const isSellerVerified = seller.verification_level !== 'registered';
-  const locationParts = [seller.city, seller.state].filter(Boolean).join(', ');
+  const productIds = [...new Set(deliveredOrders.map((order) => order.product_id).filter(Boolean))] as string[];
+  const deliveredProducts = productIds.length
+    ? ((await supabase.from('products').select('id, price_kobo').in('id', productIds)).data as Pick<Product, 'id' | 'price_kobo'>[] | null) ?? []
+    : [];
+  const priceById = new Map(deliveredProducts.map((product) => [product.id, product.price_kobo]));
+  const revenueKobo = deliveredOrders.reduce(
+    (sum, order) => sum + (order.product_id ? priceById.get(order.product_id) ?? 0 : 0) * order.quantity,
+    0
+  );
 
   return (
-    <>
-      <div className="wrap breadcrumb">
-        <Link href="/">Home</Link> / <Link href="/marketplace">Marketplace</Link> / {item.name}
+    <DashboardShell
+      navSections={getBusinessNav(biz.slug, 'dashboard')}
+      signedInAs={profile.full_name || 'Business Owner'}
+      signedInSubtext={`${biz.name} · ${biz.min_id ?? 'ID pending'}`}
+      welcomeTitle="Business Dashboard"
+      welcomeSubtitle={`Welcome back, ${profile.full_name?.split(' ')[0] || 'there'}. Here is what is happening with ${biz.name}.`}
+    >
+      <div className="widget span-1 stat-widget">
+        <div className="widget-head"><h3>Products Listed</h3></div>
+        <div className="figure">{products.length}</div>
+        <div className="delta delta-flat">Live on your profile</div>
       </div>
 
-      <section className="wrap product-grid">
-        <ProductGallery images={[THUMBS[thumbIndex]]} />
+      <div className="widget span-1 stat-widget">
+        <div className="widget-head"><h3>Total Orders</h3></div>
+        <div className="figure">{orders.length}</div>
+        <div className="delta delta-flat">All orders</div>
+      </div>
 
-        <div>
-          <div className="product-cat">{seller.category}</div>
-          <h1 className="product-title">{item.name}</h1>
+      <div className="widget span-1 stat-widget">
+        <div className="widget-head"><h3>Pending Orders</h3></div>
+        <div className="figure">{pendingOrders.length}</div>
+        <div className="delta delta-flat">Need your attention</div>
+      </div>
 
-          <div className="price-block">
-            <span className="price-now">{formatNaira(item.price_kobo)}</span>
-            {item.compare_at_price_kobo && item.compare_at_price_kobo > item.price_kobo && (
-              <span className="price-was">{formatNaira(item.compare_at_price_kobo)}</span>
-            )}
-          </div>
-          {item.description && (
-            <p style={{ fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.6, marginTop: 10 }}>
-              {item.description}
-            </p>
-          )}
+      <div className="widget span-1 stat-widget">
+        <div className="widget-head"><h3>Delivered Revenue</h3></div>
+        <div className="figure" style={{ fontSize: 22 }}>{formatNaira(revenueKobo)}</div>
+        <div className="delta delta-flat">From delivered orders</div>
+      </div>
 
-          <Link href={`/business/${seller.slug}`} className="seller-row">
-            <div className={`seller-avatar ${THUMBS[(thumbIndex + 1) % THUMBS.length]}`} aria-hidden="true" />
-            <div style={{ flex: 1 }}>
-              <div className="name">{seller.name}</div>
-              <div className="meta">{locationParts || seller.category} &middot; {seller.min_id ?? 'ID pending'}</div>
-            </div>
-            {isSellerVerified && <Badge variant="verified">Verified</Badge>}
-          </Link>
-
-          <OrderPanel businessId={seller.id} productId={item.id} slug={item.slug} name={item.name} priceKobo={item.price_kobo} sellerName={seller.name} />
-
-          <div className="trust-mini">
-            <div className="trust-mini-item">
-              <Stamp>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M5 13l4 4L19 7" /></svg>
-              </Stamp>
-              {isSellerVerified ? 'Verified seller' : 'Registered seller'}
-            </div>
-          </div>
+      <div className="widget span-2">
+        <div className="widget-head">
+          <h3>Recent Orders</h3>
+          <Link href="/dashboard/orders" className="section-link">View all →</Link>
         </div>
-      </section>
-
-      <section className="section section-alt">
-        <div className="wrap">
-          <Tabs
-            tabs={[
-              {
-                key: 'description',
-                label: 'Description',
-                panel: (
-                  <div style={{ maxWidth: '70ch', marginTop: 26, fontSize: 14.5, color: 'var(--ink-soft)', lineHeight: 1.7 }}>
-                    {item.description || 'No additional description provided for this product yet.'}
-                  </div>
-                ),
-              },
-              {
-                key: 'reviews',
-                label: 'Reviews',
-                panel:
-                  reviews.length > 0 ? (
-                    <div style={{ marginTop: 26, maxWidth: 480 }}>
-                      <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 12 }}>
-                        {avgRating} average &middot; {reviews.length} review{reviews.length === 1 ? '' : 's'}
-                      </p>
-                      {reviews.map((review) => (
-                        <div className="review-item" key={review.id}>
-                          <div className="review-head">
-                            <span>{reviewerLabel(review.customer_id)}</span>
-                            <span>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
-                          </div>
-                          {review.comment && <p>&quot;{review.comment}&quot;</p>}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="empty-state" style={{ marginTop: 26, maxWidth: 480 }}>
-                      No reviews yet. Be the first to review this product after your order arrives.
-                    </div>
-                  ),
-              },
-            ]}
-          />
-        </div>
-      </section>
-
-      {related.length > 0 && (
-        <section className="section">
-          <div className="wrap">
-            <div className="section-head">
+        {orders.length === 0 ? (
+          <div className="empty-state">No orders yet. Orders from customers will appear here.</div>
+        ) : (
+          orders.slice(0, 5).map((order) => (
+            <div className="order-row" key={order.id}>
               <div>
-                <div className="eyebrow">From the same seller</div>
-                <h2>More from {seller.name}</h2>
+                <b>Order #{order.id.slice(0, 8)}</b>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                  {new Date(order.created_at).toLocaleDateString('en-NG')} · Qty {order.quantity}
+                </div>
               </div>
+              <span className="dot-tag"><span className="dot-sm" />{order.status}</span>
             </div>
-            <div className="card-grid">
-              {related.map((p, i) => (
-                <Link key={p.slug} href={`/product/${p.slug}`} className="biz-card">
-                  <div className={`biz-thumb ${THUMBS[i % THUMBS.length]}`} />
-                  <div className="biz-body">
-                    <h4>{p.name}</h4>
-                    <div className="biz-meta">{formatNaira(p.price_kobo)}</div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-    </>
+          ))
+        )}
+      </div>
+
+      <div className="widget span-2">
+        <div className="widget-head"><h3>Quick Actions</h3></div>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <Link href="/dashboard/products" className="btn btn-primary">Add or manage products</Link>
+          <Link href={`/business/${biz.slug}`} className="btn btn-outline">View public profile</Link>
+          <Link href="/dashboard/verification" className="btn btn-outline">Check verification</Link>
+        </div>
+      </div>
+
+      <div className="widget span-4">
+        <div className="widget-head"><h3>Keep Your Business Profile Complete</h3></div>
+        <div className="empty-state">
+          A complete profile helps customers understand who you are, what you sell, and how to reach you.
+          Keep your products, verification status, and public business information up to date.
+        </div>
+      </div>
+    </DashboardShell>
   );
 }
