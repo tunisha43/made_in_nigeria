@@ -339,7 +339,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
 .biz-card:hover{ box-shadow:var(--shadow-card-hover); transform:translateY(-3px); }
 .biz-thumb{
   aspect-ratio:4/3; position:relative;
-  display:flex; align-items:end; padding:14px;
+  display:flex; align-items:flex-end; padding:14px;
 }
 .biz-thumb .badge{ position:relative; z-index:2; }
 .biz-body{ padding:16px 16px 18px; }
